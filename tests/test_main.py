@@ -67,11 +67,8 @@ class TestNFTMetrics:
 class TestChat:
     @respx.mock
     def test_chat_returns_reply(self, client):
-        respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
-            return_value=respx.Response(
-                200,
-                json={"choices": [{"message": {"content": "Hello from Saif!"}}]},
-            )
+        respx.post("https://openrouter.ai/api/v1/chat/completions").respond(
+            json={"choices": [{"message": {"content": "Hello from Saif!"}}]},
         )
         r = client.post("/api/chat", json={"message": "Hi!"})
         assert r.status_code == 200
@@ -116,9 +113,15 @@ class TestContact:
         sent = {}
 
         class FakeSMTP:
-            def __init__(self, host, port):
+            def __init__(self, host, port, **kwargs):
                 sent["host"] = host
                 sent["port"] = port
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
 
             def ehlo(self):
                 pass

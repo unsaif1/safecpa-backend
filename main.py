@@ -42,6 +42,36 @@ def _load_secrets() -> None:
 
 _load_secrets()
 
+# ── Chat auth key ───────────────────────────────────────────────────────────
+CHATBOT_API_KEY = os.getenv("CHATBOT_API_KEY", "")
+
+# ── App factory ─────────────────────────────────────────────────────────────
+app = FastAPI(title="SaifHaven API", version="1.0.0")
+
+# Public CORS — keep as-is
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def _chat_auth_middleware(request: Request, call_next):
+    """
+    Gate /api/chat behind x-api-key header.
+    Other endpoints (health, nft, contact) remain public.
+    """
+    if request.url.path == "/api/chat":
+        if CHATBOT_API_KEY:
+            provided_key = request.headers.get("x-api-key")
+            if provided_key != CHATBOT_API_KEY:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "unauthorized — include x-api-key header"},
+                )
+    return await call_next(request)
+
 # ── Config ──────────────────────────────────────────────────────────────────
 APP_PORT   = int(os.getenv("APP_PORT",   "8000"))
 APP_HOST   = os.getenv("APP_HOST",   "0.0.0.0")
@@ -52,7 +82,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "noreply@saifhaven.com")
-SMTP_TO   = os.getenv("SMTP_TO",   SMTP_FROM)  # send to same address unless overridden
+SMTP_TO   = os.getenv("SMTP_TO",   SMTP_FROM)
 
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -62,16 +92,6 @@ LOG_DIR    = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 CHAT_LOG   = LOG_DIR / "conversations.json"
 CONTACT_LOG = LOG_DIR / "contacts.json"
-
-app = FastAPI(title="SaifHaven API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,7 +149,6 @@ async def contact(request: Request):
     if not SMTP_HOST or not SMTP_USER or not SMTP_PASS:
         raise HTTPException(status_code=503, detail="SMTP not configured on server")
 
-    # Build email
     msg = MIMEMultipart("alternative")
     msg["From"]    = SMTP_FROM
     msg["To"]      = SMTP_TO
