@@ -22,11 +22,31 @@ from fastapi.responses import JSONResponse
 import httpx
 import uvicorn
 
+# ── Secrets loading ──────────────────────────────────────────────────────────
+# Priority order: env_file (/.env) → Docker secrets (/run/secrets/safecpa.env) → env vars
+def _load_secrets() -> None:
+    """Load credential values from Docker secrets or .env file into os.environ."""
+    candidates = [
+        "/run/secrets/safecpa.env",   # Docker Compose secrets
+        "/app/.env",                   # legacy entrypoint copy
+        "/app/.env.local",             # local overrides
+    ]
+    for path in candidates:
+        p = Path(path)
+        if p.exists():
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip())
+
+_load_secrets()
+
 # ── Config ──────────────────────────────────────────────────────────────────
 APP_PORT   = int(os.getenv("APP_PORT",   "8000"))
 APP_HOST   = os.getenv("APP_HOST",   "0.0.0.0")
 
-# SMTP secrets – MUST come from env; do NOT hardcode
+# SMTP secrets – MUST come from secrets file or env; do NOT hardcode
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")

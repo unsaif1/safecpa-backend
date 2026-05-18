@@ -4,6 +4,7 @@ __pycache__/
 dist/
 build/
 .env
+secrets/safecpa.env
 logs/
 *.log
 .pytest_cache/
